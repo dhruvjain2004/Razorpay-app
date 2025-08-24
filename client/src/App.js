@@ -102,6 +102,7 @@ function App() {
     try {
       // Initialize Razorpay payment
       const options = {
+        // eslint-disable-next-line no-undef
         key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID',
         amount: order.amount,
         currency: order.currency,
