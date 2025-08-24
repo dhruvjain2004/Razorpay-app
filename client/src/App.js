@@ -30,9 +30,19 @@ function App() {
   const fetchPayments = async () => {
     try {
       const response = await axios.get('/api/payments');
-      setPayments(response.data);
+      const data = response.data;
+
+      // ✅ ensure payments is always an array
+      if (Array.isArray(data)) {
+        setPayments(data);
+      } else if (Array.isArray(data.payments)) {
+        setPayments(data.payments);
+      } else {
+        setPayments([]);
+      }
     } catch (error) {
       console.error('Error fetching payments:', error);
+      setPayments([]);
     }
   };
 
@@ -46,7 +56,6 @@ function App() {
     setMessage('');
 
     try {
-      // Create order
       const orderResponse = await axios.post('/api/create-order', {
         amount: parseFloat(amount),
         currency
@@ -55,13 +64,10 @@ function App() {
       const order = orderResponse.data;
 
       if (serverMode === 'Mock Payment System') {
-        // Use mock payment system
         await handleMockPayment(order);
       } else {
-        // Use real Razorpay
         await handleRazorpayPayment(order);
       }
-
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to create payment order' });
     } finally {
@@ -71,13 +77,9 @@ function App() {
 
   const handleMockPayment = async (order) => {
     try {
-      // Simulate payment processing
       setMessage({ type: 'info', text: 'Processing mock payment...' });
-      
-      // Wait for 2 seconds to simulate processing
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Verify payment
+
       const verifyResponse = await axios.post('/api/verify-payment', {
         orderId: order.id,
         paymentId: 'mock_payment_' + Date.now(),
@@ -100,7 +102,6 @@ function App() {
 
   const handleRazorpayPayment = async (order) => {
     try {
-      // Initialize Razorpay payment
       const options = {
         // eslint-disable-next-line no-undef
         key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID',
@@ -111,7 +112,6 @@ function App() {
         order_id: order.id,
         handler: async function (response) {
           try {
-            // Verify payment
             const verifyResponse = await axios.post('/api/verify-payment', {
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
@@ -143,7 +143,6 @@ function App() {
 
       const rzp = new window.Razorpay(options);
       rzp.open();
-
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to initialize Razorpay payment' });
     }
@@ -176,17 +175,24 @@ function App() {
     }
   };
 
-  const filteredPayments = payments.filter(payment => {
-    return (filterCurrency === 'ALL' || payment.currency === filterCurrency) &&
-           (filterStatus === 'ALL' || payment.status.toLowerCase().includes(filterStatus.toLowerCase()));
-  });
+  // ✅ safe filters
+  const filteredPayments = Array.isArray(payments)
+    ? payments.filter(payment =>
+        (filterCurrency === 'ALL' || payment.currency === filterCurrency) &&
+        (filterStatus === 'ALL' || payment.status?.toLowerCase().includes(filterStatus.toLowerCase()))
+      )
+    : [];
 
-  const paymentSummary = payments.reduce((acc, payment) => {
-    acc.total += payment.amount;
-    acc.count += 1;
-    acc.byCurrency[payment.currency] = (acc.byCurrency[payment.currency] || 0) + payment.amount;
-    return acc;
-  }, { total: 0, count: 0, byCurrency: {} });
+  // ✅ safe summary
+  const paymentSummary = Array.isArray(payments)
+    ? payments.reduce((acc, payment) => {
+        acc.total += payment.amount || 0;
+        acc.count += 1;
+        acc.byCurrency[payment.currency] =
+          (acc.byCurrency[payment.currency] || 0) + (payment.amount || 0);
+        return acc;
+      }, { total: 0, count: 0, byCurrency: {} })
+    : { total: 0, count: 0, byCurrency: {} };
 
   const handleClearHistory = async () => {
     if (!window.confirm('Are you sure you want to clear all payment history?')) return;
@@ -208,13 +214,13 @@ function App() {
         <div className="card">
           <h1>💳 Payment Gateway</h1>
           <p>Test your payments with our secure payment system</p>
-          
+
           {serverMode && (
             <div className={`mode-indicator ${serverMode === 'Mock Payment System' ? 'mock' : 'razorpay'}`}>
               <strong>Mode:</strong> {serverMode}
             </div>
           )}
-          
+
           <div className="input-group">
             <label htmlFor="amount">Amount</label>
             <input
@@ -249,11 +255,7 @@ function App() {
           </div>
 
           <div className="button-group">
-            <button
-              className="btn"
-              onClick={handlePayment}
-              disabled={loading}
-            >
+            <button className="btn" onClick={handlePayment} disabled={loading}>
               {loading ? 'Processing...' : 'Pay Now'}
             </button>
 
@@ -326,14 +328,14 @@ function App() {
               <div key={index} className="payment-item">
                 <h4>
                   Payment #{index + 1}
-                  <span className={`status-badge ${payment.status.includes('success') ? 'success' : 'error'}`}>
+                  <span className={`status-badge ${payment.status?.includes('success') ? 'success' : 'error'}`}>
                     {payment.status}
                   </span>
                 </h4>
                 <p><strong>Order ID:</strong> {payment.orderId}</p>
                 <p><strong>Payment ID:</strong> {payment.paymentId}</p>
                 <p><strong>Amount:</strong> {payment.amount} {payment.currency}</p>
-                <p><strong>Date:</strong> {new Date(payment.createdAt).toLocaleString()}</p>
+                <p><strong>Date:</strong> {payment.createdAt ? new Date(payment.createdAt).toLocaleString() : 'N/A'}</p>
               </div>
             ))
           )}
